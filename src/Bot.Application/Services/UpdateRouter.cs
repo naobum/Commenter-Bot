@@ -1,6 +1,7 @@
 ﻿using Bot.Application.Interfaces;
 using Bot.Domain.Models;
 using Bot.Shared.Config;
+using Microsoft.Extensions.Logging;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
@@ -13,20 +14,24 @@ public class UpdateRouter : IUpdateRouter
     private readonly LlmCommentService _llm;
     private readonly MemoryService _memory;
     private readonly BotOptions _options;
+    private readonly ILogger<UpdateRouter> _logger;
 
     private readonly HashSet<long> _allowedChats;
 
-    public UpdateRouter(ITelegramBotClient bot, LlmCommentService llm, MemoryService memory, BotOptions options)
+    public UpdateRouter(ITelegramBotClient bot, LlmCommentService llm, MemoryService memory, BotOptions options, ILogger<UpdateRouter> logger)
     {
         _bot = bot;
         _llm = llm;
         _memory = memory;
         _options = options;
         _allowedChats = ParseAllowed(options.AllowedChatIdsCsv);
+        _logger = logger;
     }
 
     public async Task Handle(Update update, CancellationToken cancellationToken)
     {
+        _logger.LogInformation("Update: {Type}", update.Type);
+
         switch (update.Type)
         {
             case UpdateType.Message:
