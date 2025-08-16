@@ -29,14 +29,13 @@ public class OpenAIChatModel : IChatModel
         _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _botOptions.LlmApiKey);
     }
 
-    private sealed record ChatReq(string model, IEnumerable<object> messages, double temperature = 0.7);
+    private sealed record ChatReq(string model, IEnumerable<object> messages);
 
     public async Task<LlmResponse> Complete(IEnumerable<ConversationMessage> messages, CancellationToken ct)
     {
         var payload = new ChatReq
         (
             model: _botOptions.LlmModel,
-            temperature: 0.7,
             messages: messages.Select(m => new { role = ToOpenAiRole(m.Role), content = m.Content })
         );
 
@@ -49,7 +48,7 @@ public class OpenAIChatModel : IChatModel
         if (!resp.IsSuccessStatusCode)
         {
             _logger.LogWarning("LLM HTTP {Status}. Body: {Body}", resp.StatusCode, body);
-            return new LlmResponse("Пока думаю над остроумным ответом 🤔");
+            return new LlmResponse("Ха, мне вообще фиолетово");
         }
 
         // минимальный парсер
