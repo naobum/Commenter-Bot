@@ -1,4 +1,5 @@
 ﻿using Bot.Application.Interfaces;
+using Bot.Domain;
 using Bot.Domain.Models;
 using Bot.Shared.Config;
 using Microsoft.Extensions.Logging;
@@ -36,7 +37,7 @@ public class OpenAIChatModel : IChatModel
         (
             model: _botOptions.LlmModel,
             temperature: 0.7,
-            messages: messages.Select(m => new { role = m.Role, content = m.Content })
+            messages: messages.Select(m => new { role = ToOpenAiRole(m.Role), content = m.Content })
         );
 
         var json = JsonSerializer.Serialize(payload, _json);
@@ -61,4 +62,12 @@ public class OpenAIChatModel : IChatModel
 
         return new LlmResponse(content ?? "📝");
     }
+
+    private static string ToOpenAiRole(ConversationRole role) => role switch
+    {
+        ConversationRole.System => "system",
+        ConversationRole.User => "user",
+        ConversationRole.Assistant => "assistant",
+        _ => "user"
+    };
 }
