@@ -1,0 +1,92 @@
+using Bot.Application.Interfaces;
+using Bot.Application.Services;
+using Bot.Infrastructure.Llm;
+using Bot.Infrastructure.Storage;
+using Bot.Infrastructure.Telegram;
+using Bot.Presentation.Security;
+using Bot.Shared.Config;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.Extensions.Options;
+using Telegram.Bot;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.Configure<BotOptions>(builder.Configuration.GetSection("Bot"));
+
+builder.Services.AddLogging();
+// Add services to the container.
+
+builder.Services.AddSingleton<UpdateDedupCache>();
+
+builder.Services.AddSingleton<ITelegramBotClient>(sp =>
+{
+    var opts = sp.GetRequiredService<IOptions<BotOptions>>().Value;
+    return TelegramClientFactory.Create(Options.Create(opts));
+});
+
+builder.Services.AddSingleton<IMemoryStore>(sp =>
+{
+    var cs = builder.Configuration.GetConnectionString("sqlite") ?? "Data Source=memory.db";
+    return new SqliteMemoryStore(cs);
+});
+
+builder.Services.AddHttpClient<IChatModel, OpenAIChatModel>();
+
+builder.Services.AddSingleton(sp =>
+{
+    var opts = sp.GetRequiredService<IOptions<BotOptions>>().Value;
+    var chat = sp.GetRequiredService<IChatModel>();
+    var mem = sp.GetRequiredService<IMemoryStore>();
+    return new LlmCommentService(chat, mem, opts.MaxContextMessages);
+});
+
+builder.Services.AddSingleton<MemoryService>();
+
+builder.Services.AddSingleton<IUpdateRouter>(sp =>
+{
+    var bot = sp.GetRequiredService<ITelegramBotClient>();
+    var llm = sp.GetRequiredService<LlmCommentService>();
+    var mem = sp.GetRequiredService<MemoryService>();
+    var opts = sp.GetRequiredService<IOptions<BotOptions>>().Value;
+    return new UpdateRouter(bot, llm, mem, opts);
+});
+
+builder.Services.AddControllers().AddNewtonsoftJson();
+
+
+var app = builder.Build();
+
+// Forwarded headers (when behind reverse proxy)
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+});
+
+app.MapControllers();
+
+// On start: set webhook to our secret path
+app.Lifetime.ApplicationStarted.Register(async () =>
+{
+    var logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
+    var bot = app.Services.GetRequiredService<ITelegramBotClient>();
+    var opts = app.Services.GetRequiredService<IOptions<BotOptions>>().Value;
+    try
+    {
+        var baseUrl = app.Configuration["PublicBaseUrl"] ?? throw new InvalidOperationException("Set PublicBaseUrl");
+        var url = $"{baseUrl.TrimEnd('/')}/bot/update/{opts.WebhookSecretPathSegment}";
+        await bot.SetWebhook(url, allowedUpdates: new[]
+        {
+            Telegram.Bot.Types.Enums.UpdateType.Message,
+            Telegram.Bot.Types.Enums.UpdateType.ChannelPost,
+            Telegram.Bot.Types.Enums.UpdateType.EditedMessage
+        });
+        logger.LogInformation("Webhook set to {Url}", url);
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Failed to set webhook");
+        throw;
+    }
+});
+
+app.Run();
