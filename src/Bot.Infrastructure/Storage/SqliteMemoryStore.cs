@@ -2,12 +2,18 @@
 using Bot.Domain;
 using Bot.Domain.Models;
 using Microsoft.Data.Sqlite;
+using SQLitePCL;
 
 namespace Bot.Infrastructure.Storage;
 
 public sealed class SqliteMemoryStore : IMemoryStore
 {
     private readonly string _connString;
+
+    static SqliteMemoryStore()
+    {
+        Batteries_V2.Init();
+    }
 
     public SqliteMemoryStore(string connectionString)
     {

@@ -102,7 +102,7 @@ var forwaredHeadersOptions = new ForwardedHeadersOptions
     RequireHeaderSymmetry = false,
     ForwardLimit = 2
 };
-forwaredHeadersOptions.KnownNetworks.Add(new IPNetwork(IPAddress.Parse("172.18.0.0"), 16));
+forwaredHeadersOptions.KnownNetworks.Add(new IPNetwork(IPAddress.Parse("172.18.0.3"), 16));
 app.UseForwardedHeaders(forwaredHeadersOptions);
 
 app.Run();
