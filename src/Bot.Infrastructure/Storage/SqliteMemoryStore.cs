@@ -5,142 +5,174 @@ using Microsoft.Data.Sqlite;
 
 namespace Bot.Infrastructure.Storage;
 
-public class SqliteMemoryStore : IMemoryStore
+public sealed class SqliteMemoryStore : IMemoryStore
 {
-    private readonly string _connectionString;
+    private readonly string _connString;
 
     public SqliteMemoryStore(string connectionString)
     {
-        _connectionString = Normalize(connectionString);
-        EnsureDbDirectory();
-        EnsureSchema();
-    }
-    public async Task Append(ThreadKey threadKey, ConversationMessage message, CancellationToken cancellationToken)
-    {
-        using var connection = new SqliteConnection(_connectionString);
-        await connection.OpenAsync(cancellationToken);
-        using var command = connection.CreateCommand();
-        command.CommandText = @"
-        INSERT INTO messages(chat_id, thread_id, role, content, ts)
-        VALUES ($chat, $thread, $role, $content, $ts)";
-        command.Parameters.AddWithValue("$chat", threadKey.ChatId);
-        command.Parameters.AddWithValue("$thread", threadKey.ThreadId);
-        command.Parameters.AddWithValue("$role", message.Role);
-        command.Parameters.AddWithValue("$content", message.Content);
-        command.Parameters.AddWithValue("$ts", message.Ts.UtcDateTime);
-        await command.ExecuteNonQueryAsync(cancellationToken);
+        _connString = Normalize(connectionString);
+        EnsureDbDirectory();    // создаём каталог, если надо
+        EnsureSchema();         // открываем соединение и создаём таблицы
     }
 
-    public async Task<string?> GetSummary(ThreadKey threadKey, CancellationToken cancellationToken)
+    private static string Normalize(string cs)
     {
-        using var connection = new SqliteConnection(_connectionString);
-        await connection.OpenAsync(cancellationToken);
-        using var command = connection.CreateCommand();
-        command.CommandText = @"SELECT summary FROM thread_summaries WHERE chat_id = $chat AND thread_id = $thread";
-        command.Parameters.AddWithValue("@chat", threadKey.ChatId);
-        command.Parameters.AddWithValue("@thread", threadKey.ThreadId);
-        var result = await command.ExecuteScalarAsync(cancellationToken);
-        return result as string;
-    }
+        var b = new SqliteConnectionStringBuilder(cs);
 
-    public async Task<IReadOnlyList<ConversationMessage>> LoadRecent(ThreadKey threadKey, int maxItems, CancellationToken cancellationToken)
-    {
-        using var connection = new SqliteConnection(_connectionString);
-        await connection.OpenAsync(cancellationToken);
-        using var command = connection.CreateCommand();
-        command.CommandText = @"
-        SELECT role, content, ts FROM messages
-        WHERE chat_id = $chat AND thread_id = $thread
-        ORDER BY ts DESC
-        LIMIT $limit;";
-        command.Parameters.AddWithValue("$chat", threadKey.ChatId);
-        command.Parameters.AddWithValue("$thread", threadKey.ThreadId);
-        command.Parameters.AddWithValue("$limit", maxItems);
+        // БД по умолчанию в /data (папка примонтирована volume'ом)
+        if (string.IsNullOrWhiteSpace(b.DataSource))
+            b.DataSource = "/data/memory.db";
 
-        var list = new List<ConversationMessage>();
-        using var reader = await command.ExecuteReaderAsync(cancellationToken);
-
-        while (await reader.ReadAsync(cancellationToken))
+        // Абсолютный путь (если не :memory:)
+        if (!string.Equals(b.DataSource, ":memory:", StringComparison.OrdinalIgnoreCase)
+            && !Path.IsPathRooted(b.DataSource))
         {
-            var roleStr = reader.GetString(0);
-            var content = reader.GetString(1);
-            var ts = DateTime.SpecifyKind(reader.GetDateTime(2), DateTimeKind.Utc);
-            var role = Enum.Parse<ConversationRole>(roleStr);
-            list.Add(new ConversationMessage(role, content, ts));
+            b.DataSource = Path.GetFullPath(b.DataSource, AppContext.BaseDirectory);
         }
 
-        list.Reverse();
-        return list;
+        // Явно разрешаем создание файла, если не задано
+        if (b.Mode == 0)
+            b.Mode = SqliteOpenMode.ReadWriteCreate;
 
-    }
+        b.Cache = SqliteCacheMode.Shared;
 
-    public async Task UpsertSummary(ThreadKey threadKey, string summary, CancellationToken cancellationToken)
-    {
-        using var connection = new SqliteConnection(_connectionString);
-        await connection.OpenAsync(cancellationToken);
-        using var command = connection.CreateCommand();
-        command.CommandText = @"
-        INSERT INTO thread_summaries(chat_id, thread_id, summary)
-        VALUES ($chat, $thread, $summary)
-        ON CONFLICT(chat_id, thread_id) DO UPDATE SET summary = excluded.summary;";
-        command.Parameters.AddWithValue("@chat", threadKey.ChatId);
-        command.Parameters.AddWithValue("@thread", threadKey.ThreadId);
-        command.Parameters.AddWithValue("@summary", summary);
-        await command.ExecuteNonQueryAsync(cancellationToken);
-    }
-
-    private string Normalize(string connectionString)
-    {
-        var builder = new SqliteConnectionStringBuilder(connectionString);
-
-        if (string.IsNullOrWhiteSpace(builder.DataSource))
-            builder.DataSource = "/data/memory.db";
-
-        if (!(builder.Mode == default)) builder.Mode = SqliteOpenMode.ReadWriteCreate;
-
-        builder.Cache = SqliteCacheMode.Shared;
-
-        return builder.ToString();
+        return b.ToString();
     }
 
     private void EnsureDbDirectory()
     {
-        var builder = new SqliteConnectionStringBuilder(_connectionString);
-        var path = builder.DataSource;
+        var b = new SqliteConnectionStringBuilder(_connString);
+        var ds = b.DataSource;
 
-        if (string.Equals(path, ":memory:", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(ds, ":memory:", StringComparison.OrdinalIgnoreCase))
             return;
 
-        if (!Path.IsPathRooted(path))
-            path = Path.GetFullPath(path, AppContext.BaseDirectory);
-
-        var dir = Path.GetDirectoryName(path);
+        var dir = Path.GetDirectoryName(ds);
         if (!string.IsNullOrEmpty(dir))
-            Directory.CreateDirectory(dir);
+            Directory.CreateDirectory(dir!);
     }
 
     private void EnsureSchema()
     {
-        using var connection = new SqliteConnection(_connectionString);
-        using var command = connection.CreateCommand();
-        command.CommandText = @"
-        PRAGMA journal_mode = WAL;
-        CREATE TABLE IF NOT EXIST messages (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            chat_id INTEGER NOT NULL,
-            thread_id INTEGER NOT NULL,
-            role TEXT NOT NULL,
-            content TEXT NOT NULL,
-            ts DATETIME NOT NULL,
-        );
-        CREATE INDEX IF NOT EXISTS ix_messages_c_t_ts ON messages(chat_id, thread_id, ts);
+        using var conn = new SqliteConnection(_connString);
 
-        CREATE TABLE IF NOT EXISTS thread_summaries (
-            chat_id INTEGER NOT NULL,
-            thread_id INTEGER NOT NULL,
-            summary TEXT NOT NULL,
-            PRIMARY KEY(chat_id, thread_id)
-        );";
-        command.ExecuteNonQuery();
+        try
+        {
+            conn.Open();
+        }
+        catch (Exception ex)
+        {
+            var ds = new SqliteConnectionStringBuilder(_connString).DataSource;
+            throw new InvalidOperationException(
+                $"Failed to open SQLite at '{ds}'. Check that the directory exists and is writable, and Mode=ReadWriteCreate.",
+                ex);
+        }
+
+        using (var pragma = conn.CreateCommand())
+        {
+            pragma.CommandText = "PRAGMA journal_mode=WAL;";
+            _ = pragma.ExecuteScalar();
+        }
+
+        using var tx = conn.BeginTransaction();
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.Transaction = tx;
+
+            cmd.CommandText = @"
+CREATE TABLE IF NOT EXISTS messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  chat_id    INTEGER NOT NULL,
+  thread_id  INTEGER NOT NULL,
+  role       TEXT    NOT NULL,
+  content    TEXT    NOT NULL,
+  ts         DATETIME NOT NULL
+);";
+            cmd.ExecuteNonQuery();
+
+            cmd.CommandText = @"CREATE INDEX IF NOT EXISTS ix_messages_c_t_ts ON messages(chat_id, thread_id, ts);";
+            cmd.ExecuteNonQuery();
+
+            cmd.CommandText = @"
+CREATE TABLE IF NOT EXISTS thread_summaries (
+  chat_id   INTEGER NOT NULL,
+  thread_id INTEGER NOT NULL,
+  summary   TEXT    NOT NULL,
+  PRIMARY KEY(chat_id, thread_id)
+);";
+            cmd.ExecuteNonQuery();
+
+            tx.Commit();
+        }
+    }
+    public async Task Append(ThreadKey key, ConversationMessage message, CancellationToken ct)
+    {
+        await using var conn = new SqliteConnection(_connString);
+        await conn.OpenAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+INSERT INTO messages(chat_id, thread_id, role, content, ts)
+VALUES ($chat, $thread, $role, $content, $ts);";
+        cmd.Parameters.AddWithValue("$chat", key.ChatId);
+        cmd.Parameters.AddWithValue("$thread", key.ThreadId);
+        cmd.Parameters.AddWithValue("$role", message.Role.ToString());
+        cmd.Parameters.AddWithValue("$content", message.Content);
+        cmd.Parameters.AddWithValue("$ts", message.Ts.UtcDateTime);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<ConversationMessage>> LoadRecent(ThreadKey key, int maxItems, CancellationToken ct)
+    {
+        await using var conn = new SqliteConnection(_connString);
+        await conn.OpenAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+SELECT role, content, ts FROM messages
+WHERE chat_id = $chat AND thread_id = $thread
+ORDER BY ts DESC
+LIMIT $limit;";
+        cmd.Parameters.AddWithValue("$chat", key.ChatId);
+        cmd.Parameters.AddWithValue("$thread", key.ThreadId);
+        cmd.Parameters.AddWithValue("$limit", maxItems);
+
+        var list = new List<ConversationMessage>();
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            var role = Enum.Parse<ConversationRole>(reader.GetString(0));
+            var content = reader.GetString(1);
+            var ts = DateTime.SpecifyKind(reader.GetDateTime(2), DateTimeKind.Utc);
+            list.Add(new ConversationMessage(role, content, ts));
+        }
+        list.Reverse();
+        return list;
+    }
+
+    public async Task UpsertSummary(ThreadKey key, string summary, CancellationToken ct)
+    {
+        await using var conn = new SqliteConnection(_connString);
+        await conn.OpenAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+INSERT INTO thread_summaries(chat_id, thread_id, summary)
+VALUES ($chat, $thread, $summary)
+ON CONFLICT(chat_id, thread_id) DO UPDATE SET summary = excluded.summary;";
+        cmd.Parameters.AddWithValue("$chat", key.ChatId);
+        cmd.Parameters.AddWithValue("$thread", key.ThreadId);
+        cmd.Parameters.AddWithValue("$summary", summary);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task<string?> GetSummary(ThreadKey key, CancellationToken ct)
+    {
+        await using var conn = new SqliteConnection(_connString);
+        await conn.OpenAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"SELECT summary FROM thread_summaries WHERE chat_id = $chat AND thread_id = $thread;";
+        cmd.Parameters.AddWithValue("$chat", key.ChatId);
+        cmd.Parameters.AddWithValue("$thread", key.ThreadId);
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return result as string;
     }
 }
