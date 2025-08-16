@@ -16,6 +16,7 @@
     <ProjectReference Include="..\Bot.Application\Bot.Application.csproj" />
     <ProjectReference Include="..\Bot.Infrastructure\Bot.Infrastructure.csproj" />
     <ProjectReference Include="..\Bot.Domain\Bot.Domain.csproj" />
+    <ProjectReference Include="..\Bot.Shared\Bot.Shared.csproj" />
   </ItemGroup>
 
 </Project>

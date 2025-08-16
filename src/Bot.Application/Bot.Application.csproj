@@ -1,8 +1,9 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Bot.Shared\Bot.Shared.csproj" />
+    <ProjectReference Include="..\Bot.Shared\Bot.Shared.csproj" />
     <ProjectReference Include="..\Bot.Domain\Bot.Domain.csproj" />
+    <ProjectReference Include="..\Bot.Shared\Bot.Shared.csproj" />
   </ItemGroup>
 
   <PropertyGroup>
