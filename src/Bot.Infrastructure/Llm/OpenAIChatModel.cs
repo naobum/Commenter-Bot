@@ -1,5 +1,4 @@
 ﻿using Bot.Application.Interfaces;
-using Bot.Domain;
 using Bot.Domain.Models;
 using Bot.Shared.Config;
 using Microsoft.Extensions.Options;
@@ -13,6 +12,10 @@ public class OpenAIChatModel : IChatModel
 {
     private readonly HttpClient _httpClient;
     private readonly BotOptions _botOptions;
+    private static readonly JsonSerializerOptions _json = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
 
     public OpenAIChatModel(HttpClient httpClient, IOptions<BotOptions> options)
     {
@@ -23,33 +26,35 @@ public class OpenAIChatModel : IChatModel
     }
 
     private sealed record ChatReq(string model, IEnumerable<object> messages, double temperature = 0.7);
-    private sealed record ChatMsg(string role, string content);
-    private sealed record ChatResp(Choice[] choices);
-    private sealed record Choice(Message message);
-    private sealed record Message(string role, string content);
 
-    public async Task<LlmResponse> Complete(IEnumerable<ConversationMessage> messages, CancellationToken cancellationToken)
+    public async Task<LlmResponse> Complete(IEnumerable<ConversationMessage> messages, CancellationToken ct)
     {
-        var payload = new ChatReq(
+        var payload = new ChatReq
+        (
             model: _botOptions.LlmModel,
-            messages: messages.Select(m => new ChatMsg(m.Role switch
-            {
-                ConversationRole.System => "system",
-                ConversationRole.Assistant => "assistant",
-                _ => "user"
-            }, m.Content))
-         );
+            temperature: 0.7,
+            messages: messages.Select(m => new { role = m.Role, content = m.Content })
+        );
 
-        var json = JsonSerializer.Serialize(payload);
-        using var resp = await _httpClient.PostAsync(
-            json,
-            new StringContent(json, Encoding.UTF8, "application/json"),
-            cancellationToken);
-        resp.EnsureSuccessStatusCode();
-        var body = await resp.Content.ReadAsStringAsync(cancellationToken);
-        var parsed = JsonSerializer.Deserialize<ChatResp>(body) ?? throw new Exception("Invalid LLM response");
-        var text = parsed.choices.FirstOrDefault()?.message.content ?? string.Empty;
+        var json = JsonSerializer.Serialize(payload, _json);
+        using var req = new HttpRequestMessage(HttpMethod.Post, "v1/chat/completions");
+        req.Content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        return new LlmResponse(text);
+        using var resp = await _httpClient.SendAsync(req, ct);
+        var body = await resp.Content.ReadAsStringAsync(ct);
+        if (!resp.IsSuccessStatusCode)
+        {
+            return new LlmResponse("Пока думаю над остроумным ответом 🤔");
+        }
+
+        // минимальный парсер
+        using var doc = JsonDocument.Parse(body);
+        var content = doc.RootElement
+            .GetProperty("choices")[0]
+            .GetProperty("message")
+            .GetProperty("content")
+            .GetString();
+
+        return new LlmResponse(content ?? "📝");
     }
 }
