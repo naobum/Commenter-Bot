@@ -6,6 +6,7 @@ using Bot.Infrastructure.Telegram;
 using Bot.Presentation.Security;
 using Bot.Shared.Config;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using System.Net;
 using Telegram.Bot;
@@ -56,12 +57,23 @@ builder.Services.AddSingleton<IUpdateRouter>(sp =>
     return new UpdateRouter(bot, llm, mem, opts);
 });
 
-builder.Services.AddControllers().AddNewtonsoftJson();
+builder.Services.AddControllers();
+builder.Services.Configure<ApiBehaviorOptions>(options =>
+{
+    options.InvalidModelStateResponseFactory = ctx =>
+    {
+        var errors = string.Join("; ",
+            ctx.ModelState.Where(kv => kv.Value?.Errors.Count > 0)
+                          .Select(kv => $"{kv.Key}: {string.Join(",", kv.Value!.Errors.Select(e => e.ErrorMessage))}"));
+        var log = ctx.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("ModelState");
+        log.LogWarning("Model binding failed: {Errors}", errors);
+        return new BadRequestObjectResult(ctx.ModelState);
+    };
+});
 
 
 var app = builder.Build();
 
-// Forwarded headers (when behind reverse proxy)
 app.UseForwardedHeaders(new ForwardedHeadersOptions
 {
     ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
@@ -102,7 +114,7 @@ var forwaredHeadersOptions = new ForwardedHeadersOptions
     RequireHeaderSymmetry = false,
     ForwardLimit = 2
 };
-forwaredHeadersOptions.KnownNetworks.Add(new IPNetwork(IPAddress.Parse("172.18.0.3"), 16));
+forwaredHeadersOptions.KnownNetworks.Add(new IPNetwork(IPAddress.Parse("172.18.0.0"), 16));
 app.UseForwardedHeaders(forwaredHeadersOptions);
 
 app.Run();
