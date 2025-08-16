@@ -47,6 +47,7 @@ public class OpenAIChatModel : IChatModel
         var body = await resp.Content.ReadAsStringAsync(ct);
         if (!resp.IsSuccessStatusCode)
         {
+            _logger.LogWarning("LLM HTTP {Status}. Body: {Body}", resp.StatusCode, body);
             return new LlmResponse("Пока думаю над остроумным ответом 🤔");
         }
 
