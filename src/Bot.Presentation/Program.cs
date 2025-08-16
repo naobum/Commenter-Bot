@@ -7,13 +7,15 @@ using Bot.Presentation.Security;
 using Bot.Shared.Config;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Options;
+using System.Net;
 using Telegram.Bot;
+using IPNetwork = Microsoft.AspNetCore.HttpOverrides.IPNetwork;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.Configure<BotOptions>(builder.Configuration.GetSection("Bot"));
-
 builder.Services.AddLogging();
+builder.Services.AddHealthChecks();
 // Add services to the container.
 
 builder.Services.AddSingleton<UpdateDedupCache>();
@@ -63,6 +65,8 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions
 });
 
 app.MapControllers();
+app.MapHealthChecks("/healthz");
+app.MapGet("/", () => Results.Ok);
 
 // On start: set webhook to our secret path
 app.Lifetime.ApplicationStarted.Register(async () =>
@@ -88,5 +92,14 @@ app.Lifetime.ApplicationStarted.Register(async () =>
         throw;
     }
 });
+
+var forwaredHeadersOptions = new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
+    RequireHeaderSymmetry = false,
+    ForwardLimit = 2
+};
+forwaredHeadersOptions.KnownNetworks.Add(new IPNetwork(IPAddress.Parse("172.18.0.0"), 16));
+app.UseForwardedHeaders(forwaredHeadersOptions);
 
 app.Run();
