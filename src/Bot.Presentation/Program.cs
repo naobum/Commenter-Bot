@@ -28,7 +28,7 @@ builder.Services.AddSingleton<ITelegramBotClient>(sp =>
 
 builder.Services.AddSingleton<IMemoryStore>(sp =>
 {
-    var cs = builder.Configuration.GetConnectionString("sqlite") ?? "Data Source=memory.db";
+    var cs = builder.Configuration.GetConnectionString("sqlite") ?? "Data Source=/data/memory.db;Cache=Shared;Mode=ReadWriteCreate";
     return new SqliteMemoryStore(cs);
 });
 
