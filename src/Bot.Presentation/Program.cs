@@ -54,7 +54,8 @@ builder.Services.AddSingleton<IUpdateRouter>(sp =>
     var llm = sp.GetRequiredService<LlmCommentService>();
     var mem = sp.GetRequiredService<MemoryService>();
     var opts = sp.GetRequiredService<IOptions<BotOptions>>().Value;
-    return new UpdateRouter(bot, llm, mem, opts);
+    var logger = sp.GetRequiredService<ILogger<UpdateRouter>>();
+    return new UpdateRouter(bot, llm, mem, opts, logger);
 });
 
 builder.Services.AddControllers();
