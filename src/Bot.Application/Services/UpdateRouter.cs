@@ -36,7 +36,11 @@ public class UpdateRouter : IUpdateRouter
         {
             case UpdateType.Message:
                 if (update.Message is { } m)
+                {
+                    _logger.LogInformation("Message chat={chat} type={ctype} thread={thread} autoFwd={af} fromBot={bot} textLen={len}",
+                        m.Chat?.Id, m.Chat?.Type, m.MessageThreadId, m.IsAutomaticForward, m.From?.IsBot, m.Text?.Length ?? (m.Caption?.Length ?? 0));
                     await OnMessage(m, cancellationToken);
+                }
                 break;
             default:
                 break;
