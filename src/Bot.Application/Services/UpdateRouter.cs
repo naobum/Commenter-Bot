@@ -47,52 +47,51 @@ public class UpdateRouter : IUpdateRouter
         }
     }
 
-    private async Task OnMessage(Message message, CancellationToken cancellationToken)
+    private async Task OnMessage(Message message, CancellationToken cancelationToken)
     {
-        if (message.Chat is null) return;
-        if (_allowedChats.Count > 0 && !_allowedChats.Contains(message.Chat.Id)) return;
-
-        if (message.Chat.Type is not ChatType.Supergroup || message.Chat.Type is not ChatType.Group) return;
+        // только группы/супергруппы
+        if (message.Chat.Type is not ChatType.Supergroup && message.Chat.Type is not ChatType.Group) return;
 
         var threadId = message.MessageThreadId;
-        if (threadId is null) return;
+        var rootId = message.ReplyToMessage?.MessageId ?? message.MessageId;
+        var keyId = threadId ?? rootId;
+        var key = new ThreadKey(message.Chat.Id, keyId);
 
-        var key = new ThreadKey(message.Chat.Id, threadId.Value);
-
-        if (message.IsAutomaticForward)
+        if (message.IsAutomaticForward == true)
         {
-            var textForLlm = message.Text ?? message.Caption ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(textForLlm)) return; // media-only post -> skip or describe
+            var textForLlm = message.Text ?? message.Caption;
+            if (string.IsNullOrWhiteSpace(textForLlm))
+                textForLlm = "Описание поста отсутствует. Дай короткий уместный комментарий к медиа.";
 
-            await _memory.AppendPerson(key, textForLlm, cancellationToken);
-            var reply = await _llm.BuildReply(key, textForLlm, cancellationToken);
-
-            await _bot.SendMessage(
-                chatId: message.Chat.Id,
-                text: reply,
-                messageThreadId: threadId,
-                replyParameters: message.MessageId, // appear under the post thread
-                cancellationToken: cancellationToken);
-            return;
-        }
-
-        if (message.IsFromPerson())
-        {
-            var userText = message.Text!.Trim();
-            if (userText.StartsWith('/') || userText.Length < 2) return; // ignore commands/very short
-
-            // Light rate-limiting via probability gate
-            if (!ProbabilityGate.Hit(_options.ReplyProbability)) return;
-
-            await _memory.AppendPerson(key, userText, cancellationToken);
-            var reply = await _llm.BuildReply(key, userText, cancellationToken);
+            await _memory.AppendPerson(key, textForLlm, cancelationToken);
+            var reply = await _llm.BuildReply(key, textForLlm, cancelationToken);
 
             await _bot.SendMessage(
                 chatId: message.Chat.Id,
                 text: reply,
                 messageThreadId: threadId,
                 replyParameters: message.MessageId,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancelationToken);
+
+            return;
+        }
+
+        if (message.IsFromPerson())
+        {
+            var userText = (message.Text ?? message.Caption ?? "").Trim();
+            if (userText.StartsWith("/") || userText.Length < 2) return;
+
+            if (!ProbabilityGate.Hit(_options.ReplyProbability)) return;
+
+            await _memory.AppendPerson(key, userText, cancelationToken);
+            var reply = await _llm.BuildReply(key, userText, cancelationToken);
+
+            await _bot.SendMessage(
+                chatId: message.Chat.Id,
+                text: reply,
+                messageThreadId: threadId,
+                replyParameters: message.MessageId,
+                cancellationToken: cancelationToken);
         }
     }
     private static HashSet<long> ParseAllowed(string? csv)
