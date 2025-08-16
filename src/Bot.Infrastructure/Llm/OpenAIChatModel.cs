@@ -1,6 +1,7 @@
 ﻿using Bot.Application.Interfaces;
 using Bot.Domain.Models;
 using Bot.Shared.Config;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Net.Http.Headers;
 using System.Text;
@@ -12,13 +13,15 @@ public class OpenAIChatModel : IChatModel
 {
     private readonly HttpClient _httpClient;
     private readonly BotOptions _botOptions;
+    private readonly ILogger<OpenAIChatModel> _logger;
     private static readonly JsonSerializerOptions _json = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
-    public OpenAIChatModel(HttpClient httpClient, IOptions<BotOptions> options)
+    public OpenAIChatModel(HttpClient httpClient, IOptions<BotOptions> options, ILogger<OpenAIChatModel> logger)
     {
+        _logger = logger;
         _httpClient = httpClient;
         _botOptions = options.Value;
         _httpClient.BaseAddress = new Uri(_botOptions.LlmBaseUrl.TrimEnd('/') + "/");
