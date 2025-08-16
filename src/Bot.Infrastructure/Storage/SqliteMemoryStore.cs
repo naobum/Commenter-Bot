@@ -11,7 +11,8 @@ public class SqliteMemoryStore : IMemoryStore
 
     public SqliteMemoryStore(string connectionString)
     {
-        _connectionString = connectionString;
+        _connectionString = Normalize(connectionString);
+        EnsureDbDirectory();
         EnsureSchema();
     }
     public async Task Append(ThreadKey threadKey, ConversationMessage message, CancellationToken cancellationToken)
@@ -86,6 +87,36 @@ public class SqliteMemoryStore : IMemoryStore
         command.Parameters.AddWithValue("@thread", threadKey.ThreadId);
         command.Parameters.AddWithValue("@summary", summary);
         await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private string Normalize(string connectionString)
+    {
+        var builder = new SqliteConnectionStringBuilder(connectionString);
+
+        if (string.IsNullOrWhiteSpace(builder.DataSource))
+            builder.DataSource = "/data/memory.db";
+
+        if (!(builder.Mode == default)) builder.Mode = SqliteOpenMode.ReadWriteCreate;
+
+        builder.Cache = SqliteCacheMode.Shared;
+
+        return builder.ToString();
+    }
+
+    private void EnsureDbDirectory()
+    {
+        var builder = new SqliteConnectionStringBuilder(_connectionString);
+        var path = builder.DataSource;
+
+        if (string.Equals(path, ":memory:", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        if (!Path.IsPathRooted(path))
+            path = Path.GetFullPath(path, AppContext.BaseDirectory);
+
+        var dir = Path.GetDirectoryName(path);
+        if (!string.IsNullOrEmpty(dir))
+            Directory.CreateDirectory(dir);
     }
 
     private void EnsureSchema()
