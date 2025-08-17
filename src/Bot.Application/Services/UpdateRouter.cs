@@ -52,6 +52,8 @@ public class UpdateRouter : IUpdateRouter
         // только группы/супергруппы
         if (message.Chat.Type is not ChatType.Supergroup && message.Chat.Type is not ChatType.Group) return;
 
+        if (_allowedChats.Count > 0 && !_allowedChats.Contains(message.Chat.Id)) return;
+
         var threadId = message.MessageThreadId;
         var rootId = message.ReplyToMessage?.MessageId ?? message.MessageId;
         var keyId = threadId ?? rootId;
