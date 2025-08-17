@@ -59,6 +59,16 @@ builder.Services.AddSingleton<IUpdateRouter>(sp =>
 });
 
 builder.Services.AddControllers();
+
+builder.Services.Configure<ForwardedHeadersOptions>(opts =>
+{
+    opts.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    opts.RequireHeaderSymmetry = false;
+    opts.ForwardLimit = 2;
+
+    opts.KnownNetworks.Add(new IPNetwork(IPAddress.Parse("172.18.0.0"), 16));
+});
+
 builder.Services.Configure<ApiBehaviorOptions>(options =>
 {
     options.InvalidModelStateResponseFactory = ctx =>
@@ -72,17 +82,13 @@ builder.Services.Configure<ApiBehaviorOptions>(options =>
     };
 });
 
-
 var app = builder.Build();
 
-app.UseForwardedHeaders(new ForwardedHeadersOptions
-{
-    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
-});
+app.UseForwardedHeaders();
 
 app.MapControllers();
 app.MapHealthChecks("/healthz");
-app.MapGet("/", () => Results.Ok);
+app.MapGet("/", () => Results.Ok());
 
 // On start: set webhook to our secret path
 app.Lifetime.ApplicationStarted.Register(async () =>
@@ -108,14 +114,5 @@ app.Lifetime.ApplicationStarted.Register(async () =>
         throw;
     }
 });
-
-var forwaredHeadersOptions = new ForwardedHeadersOptions
-{
-    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
-    RequireHeaderSymmetry = false,
-    ForwardLimit = 2
-};
-forwaredHeadersOptions.KnownNetworks.Add(new IPNetwork(IPAddress.Parse("172.18.0.0"), 16));
-app.UseForwardedHeaders(forwaredHeadersOptions);
 
 app.Run();
