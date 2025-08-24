@@ -44,6 +44,7 @@ public class OpenAIChatModel : IChatModel
         req.Content = new StringContent(json, Encoding.UTF8, "application/json");
 
         using var resp = await _httpClient.SendAsync(req, ct);
+        _logger.LogInformation("Request {req} was sent", req);
         var body = await resp.Content.ReadAsStringAsync(ct);
         if (!resp.IsSuccessStatusCode)
         {
