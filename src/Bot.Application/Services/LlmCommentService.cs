@@ -29,9 +29,12 @@ public sealed class LlmCommentService
 
         if (!string.IsNullOrWhiteSpace(summary))
             messages.Add(ConversationMessage.System($"Краткое резюме треда: {summary}"));
-
         messages.AddRange(history);
-        messages.Add(ConversationMessage.User(userText));
+
+        var userMessage = ConversationMessage.User(userText);
+
+        messages.Add(userMessage);
+        await _memory.Append(key, userMessage, cancellationToken);
 
         var resp = await _chat.Complete(messages, cancellationToken);
 

@@ -65,7 +65,6 @@ public class UpdateRouter : IUpdateRouter
             if (string.IsNullOrWhiteSpace(textForLlm))
                 textForLlm = "Описание поста отсутствует. Дай короткий уместный комментарий к медиа.";
 
-            await _memory.AppendPerson(key, textForLlm, cancelationToken);
             var reply = await _llm.BuildReply(key, textForLlm, cancelationToken);
 
             await _bot.SendMessage(
@@ -85,7 +84,6 @@ public class UpdateRouter : IUpdateRouter
 
             if (!ProbabilityGate.Hit(_options.ReplyProbability)) return;
 
-            await _memory.AppendPerson(key, userText, cancelationToken);
             var reply = await _llm.BuildReply(key, userText, cancelationToken);
 
             await _bot.SendMessage(
