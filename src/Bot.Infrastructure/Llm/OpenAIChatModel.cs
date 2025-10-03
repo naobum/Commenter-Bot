@@ -34,7 +34,6 @@ public class OpenAIChatModel : IChatModel
         IEnumerable<object> messages,
         double temperature,
         double top_p,
-        int max_tokens,
         double frequency_penalty,
         double presence_penalty
     );
@@ -48,7 +47,6 @@ public class OpenAIChatModel : IChatModel
             messages: messages.Select(m => new { role = ToOpenAiRole(m.Role), content = m.Content }),
             temperature: 0.9,
             top_p: 0.9,
-            max_tokens: 60,
             frequency_penalty: 0.6,
             presence_penalty: 0.2
         );
