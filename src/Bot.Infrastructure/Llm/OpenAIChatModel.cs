@@ -29,14 +29,28 @@ public class OpenAIChatModel : IChatModel
         _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _botOptions.LlmApiKey);
     }
 
-    private sealed record ChatReq(string model, IEnumerable<object> messages);
+    private sealed record ChatReq(
+        string model,
+        IEnumerable<object> messages,
+        double temperature,
+        double top_p,
+        int max_tokens,
+        double frequency_penalty,
+        double presence_penalty
+    );
+
 
     public async Task<LlmResponse> Complete(IEnumerable<ConversationMessage> messages, CancellationToken ct)
     {
         var payload = new ChatReq
         (
             model: _botOptions.LlmModel,
-            messages: messages.Select(m => new { role = ToOpenAiRole(m.Role), content = m.Content })
+            messages: messages.Select(m => new { role = ToOpenAiRole(m.Role), content = m.Content }),
+            temperature: 0.9,
+            top_p: 0.9,
+            max_tokens: 60,
+            frequency_penalty: 0.6,
+            presence_penalty: 0.2
         );
 
         var json = JsonSerializer.Serialize(payload, _json);
