@@ -45,10 +45,10 @@ public class OpenAIChatModel : IChatModel
         (
             model: _botOptions.LlmModel,
             messages: messages.Select(m => new { role = ToOpenAiRole(m.Role), content = m.Content }),
-            temperature: 0.9,
+            temperature: 1.3,
             top_p: 0.9,
-            frequency_penalty: 0.6,
-            presence_penalty: 0.2
+            frequency_penalty: 0.9,
+            presence_penalty: 0.5
         );
 
         var json = JsonSerializer.Serialize(payload, _json);
