@@ -32,10 +32,6 @@ public class OpenAIChatModel : IChatModel
     private sealed record ChatReq(
         string model,
         IEnumerable<object> messages,
-        double temperature,
-        double top_p,
-        double frequency_penalty,
-        double presence_penalty,
         string reasoning_effort
     );
 
@@ -46,10 +42,6 @@ public class OpenAIChatModel : IChatModel
         (
             model: _botOptions.LlmModel,
             messages: messages.Select(m => new { role = ToOpenAiRole(m.Role), content = m.Content }),
-            temperature: 1.3,
-            top_p: 0.9,
-            frequency_penalty: 0.9,
-            presence_penalty: 0.5,
             reasoning_effort: "high"
         );
 
