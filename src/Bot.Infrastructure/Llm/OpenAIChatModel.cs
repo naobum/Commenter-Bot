@@ -35,7 +35,8 @@ public class OpenAIChatModel : IChatModel
         double temperature,
         double top_p,
         double frequency_penalty,
-        double presence_penalty
+        double presence_penalty,
+        string reasoning_effort
     );
 
 
@@ -48,7 +49,8 @@ public class OpenAIChatModel : IChatModel
             temperature: 1.3,
             top_p: 0.9,
             frequency_penalty: 0.9,
-            presence_penalty: 0.5
+            presence_penalty: 0.5,
+            reasoning_effort: "high"
         );
 
         var json = JsonSerializer.Serialize(payload, _json);
