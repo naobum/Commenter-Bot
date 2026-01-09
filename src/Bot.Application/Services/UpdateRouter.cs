@@ -82,10 +82,10 @@ public class UpdateRouter : IUpdateRouter
             var userText = (message.Text ?? message.Caption ?? "").Trim();
             if (userText.StartsWith("/") || userText.Length < 2) return;
 
-            var reply = await _llm.BuildReply(key, userText, cancelationToken);
-
             bool isReplyToBot = message.ReplyToMessage?.From?.Id == _bot.BotId;
             if (!isReplyToBot) return;
+
+            var reply = await _llm.BuildReply(key, userText, cancelationToken);
 
             await _bot.SendMessage(
                 chatId: message.Chat.Id,
