@@ -84,6 +84,9 @@ public class UpdateRouter : IUpdateRouter
 
             var reply = await _llm.BuildReply(key, userText, cancelationToken);
 
+            bool isReplyToBot = message.ReplyToMessage?.From?.Id == _bot.BotId;
+            if (!isReplyToBot) return;
+
             await _bot.SendMessage(
                 chatId: message.Chat.Id,
                 text: reply,
