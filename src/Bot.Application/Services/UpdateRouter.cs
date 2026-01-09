@@ -82,8 +82,6 @@ public class UpdateRouter : IUpdateRouter
             var userText = (message.Text ?? message.Caption ?? "").Trim();
             if (userText.StartsWith("/") || userText.Length < 2) return;
 
-            if (!ProbabilityGate.Hit(_options.ReplyProbability)) return;
-
             var reply = await _llm.BuildReply(key, userText, cancelationToken);
 
             await _bot.SendMessage(
