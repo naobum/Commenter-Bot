@@ -62,7 +62,7 @@ public class UpdateRouter : IUpdateRouter
 
         if (message.IsAutomaticForward == true)
         {
-            var textForLlm = messageAuthor + message.Text ?? message.Caption;
+            var textForLlm = messageAuthor + ": " + message.Text ?? message.Caption;
             if (string.IsNullOrWhiteSpace(textForLlm))
                 return;
 
