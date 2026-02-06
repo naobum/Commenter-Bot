@@ -54,16 +54,27 @@ public class UpdateRouter : IUpdateRouter
 
         if (_allowedChats.Count > 0 && !_allowedChats.Contains(message.Chat.Id)) return;
 
-        var messageAuthor = message.From?.FirstName ?? message.From?.Username ?? "Аноним";
+
+        string messageAuthor;
+
+        if (message.From?.IsBot is false)
+        {
+            messageAuthor = message.From.FirstName ?? message.From.Username ?? "Аноним";
+        }
+        else
+        {
+            messageAuthor = "Канал";
+        }
 
         var threadId = message.MessageThreadId;
         var rootId = message.ReplyToMessage?.MessageId ?? message.MessageId;
         var keyId = threadId ?? rootId;
         var key = new ThreadKey(message.Chat.Id, keyId);
 
+        var textForLlm = messageAuthor + ": " + (string.IsNullOrEmpty(message.Text) ? message.Caption ?? "" : message.Text);
+
         if (message.IsAutomaticForward == true)
         {
-            var textForLlm = messageAuthor + ": " + (string.IsNullOrEmpty(message.Text) ? message.Caption ?? "" : message.Text);
             if (string.IsNullOrWhiteSpace(textForLlm))
                 return;
 
@@ -87,7 +98,7 @@ public class UpdateRouter : IUpdateRouter
             bool isReplyToBot = message.ReplyToMessage?.From?.Id == _bot.BotId;
             if (!isReplyToBot) return;
 
-            var reply = await _llm.BuildReply(key, userText, cancelationToken);
+            var reply = await _llm.BuildReply(key, textForLlm, cancelationToken);
 
             await _bot.SendMessage(
                 chatId: message.Chat.Id,
