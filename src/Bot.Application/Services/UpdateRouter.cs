@@ -54,7 +54,8 @@ public class UpdateRouter : IUpdateRouter
 
         if (_allowedChats.Count > 0 && !_allowedChats.Contains(message.Chat.Id)) return;
 
-        var messageAuthor = message.From?.FirstName ?? "Анонимный отправитель";
+        var messageAuthor = message.From?.FirstName ?? message.From?.Username ?? "Аноним";
+
         var threadId = message.MessageThreadId;
         var rootId = message.ReplyToMessage?.MessageId ?? message.MessageId;
         var keyId = threadId ?? rootId;
@@ -62,7 +63,7 @@ public class UpdateRouter : IUpdateRouter
 
         if (message.IsAutomaticForward == true)
         {
-            var textForLlm = messageAuthor + ": " + message.Text ?? message.Caption;
+            var textForLlm = messageAuthor + ": " + (string.IsNullOrEmpty(message.Text) ? message.Caption ?? "" : message.Text);
             if (string.IsNullOrWhiteSpace(textForLlm))
                 return;
 
