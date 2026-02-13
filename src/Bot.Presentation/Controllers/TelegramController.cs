@@ -24,7 +24,7 @@ public sealed class TelegramController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<IActionResult> Post(
+    public IActionResult Post(
         [FromRoute] string secret,
         [FromBody] Update update,
         CancellationToken cancellationToken)
@@ -32,15 +32,20 @@ public sealed class TelegramController : ControllerBase
         if (!TimingSafeEquals(secret, _options.WebhookSecretPathSegment)) return Unauthorized();
         if (_dedup.Seen(update)) return Ok();
 
-        _ = Task.Run(async () =>
+        _ = ProcessUpdateAsync(update);
+
+        return Ok();
+    }
+
+    private async Task ProcessUpdateAsync(Update update)
+    {
+        try
         {
             using var scope = _scopeFactory.CreateScope();
             var router = scope.ServiceProvider.GetRequiredService<IUpdateRouter>();
-            await router.Handle(update, cancellationToken);
-        },
-        cancellationToken);
-
-        return Ok();
+            await router.Handle(update, CancellationToken.None);
+        }
+        catch { }
     }
 
     private static bool TimingSafeEquals(string a, string b)
