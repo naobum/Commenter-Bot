@@ -12,13 +12,13 @@ namespace Bot.Presentation.Controllers;
 [Route("bot/update/{secret}")]
 public sealed class TelegramController : ControllerBase
 {
-    private readonly IUpdateRouter _router;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly UpdateDedupCache _dedup;
     private readonly BotOptions _options;
 
-    public TelegramController(IUpdateRouter router, UpdateDedupCache dedup, IOptions<BotOptions> options)
+    public TelegramController(IServiceScopeFactory serviceScope, UpdateDedupCache dedup, IOptions<BotOptions> options)
     {
-        _router = router;
+        _scopeFactory = serviceScope;
         _dedup = dedup;
         _options = options.Value;
     }
@@ -32,7 +32,14 @@ public sealed class TelegramController : ControllerBase
         if (!TimingSafeEquals(secret, _options.WebhookSecretPathSegment)) return Unauthorized();
         if (_dedup.Seen(update)) return Ok();
 
-        await _router.Handle(update, cancellationToken);
+        _ = Task.Run(async () =>
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var router = scope.ServiceProvider.GetRequiredService<IUpdateRouter>();
+            await router.Handle(update, cancellationToken);
+        },
+        cancellationToken);
+
         return Ok();
     }
 
